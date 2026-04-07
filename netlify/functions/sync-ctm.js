@@ -11,7 +11,7 @@ const tokenCache = {
 };
 
 exports.config = {
-  schedule: "@hourly",
+  schedule: "@daily",
 };
 
 function getEnv(name, fallback) {
