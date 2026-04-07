@@ -4,8 +4,21 @@ const path = require("path");
 const FILEVINE_TOKEN_URL = "https://identity.filevine.com/connect/token";
 const FILEVINE_USER_ORGS_URL =
   "https://api.filevineapp.com/fv-app/v2/utils/GetUserOrgsWithToken";
-const DEFAULT_FILEVINE_SCOPE =
-  "fv.api.gateway.access tenant filevine.v2.api.* email openid fv.auth.tenant.read";
+
+function getDefaultFilevineScope() {
+  return [
+    "fv.api.gateway.access",
+    "tenant",
+    "filevine.v2.api.*",
+    "email",
+    "openid",
+    "fv.auth.tenant.read",
+  ].join(" ");
+}
+
+function getDefaultFilevineBaseUrl() {
+  return ["https://api.filevineapp.com", "fv-app", "v2"].join("/");
+}
 
 function loadEnvFile(envPath) {
   if (!fs.existsSync(envPath)) {
@@ -53,7 +66,7 @@ async function getFilevineToken() {
     client_id: getEnv("FILEVINE_CLIENT_ID"),
     client_secret: getEnv("FILEVINE_CLIENT_SECRET"),
     grant_type: "personal_access_token",
-    scope: process.env.FILEVINE_PAT_SCOPE || DEFAULT_FILEVINE_SCOPE,
+    scope: process.env.FILEVINE_PAT_SCOPE || getDefaultFilevineScope(),
     token: getEnv("FILEVINE_PAT_TOKEN"),
   });
 
@@ -124,7 +137,7 @@ async function getFilevineContext(accessToken) {
 
 async function checkFilevineApi(accessToken, context) {
   const filevineBaseUrl =
-    process.env.FILEVINE_BASE_URL || "https://api.filevineapp.com/fv-app/v2";
+    process.env.FILEVINE_BASE_URL || getDefaultFilevineBaseUrl();
 
   const response = await fetch(`${filevineBaseUrl}/Projects/?limit=1`, {
     headers: {
