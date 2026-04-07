@@ -2,8 +2,6 @@ const fs = require("fs");
 const path = require("path");
 
 const FILEVINE_TOKEN_URL = "https://identity.filevine.com/connect/token";
-const FILEVINE_USER_ORGS_URL =
-  "https://api.filevineapp.com/fv-app/v2/utils/GetUserOrgsWithToken";
 
 function getDefaultFilevineScope() {
   return [
@@ -18,6 +16,10 @@ function getDefaultFilevineScope() {
 
 function getDefaultFilevineBaseUrl() {
   return ["https://api.filevineapp.com", "fv-app", "v2"].join("/");
+}
+
+function getFilevineUserOrgsUrl() {
+  return `${getDefaultFilevineBaseUrl()}/utils/GetUserOrgsWithToken`;
 }
 
 function loadEnvFile(envPath) {
@@ -93,7 +95,7 @@ async function getFilevineToken() {
 }
 
 async function getFilevineContext(accessToken) {
-  const response = await fetch(FILEVINE_USER_ORGS_URL, {
+  const response = await fetch(getFilevineUserOrgsUrl(), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

@@ -1,6 +1,4 @@
 const FILEVINE_TOKEN_URL = "https://identity.filevine.com/connect/token";
-const FILEVINE_USER_ORGS_URL =
-  "https://api.filevineapp.com/fv-app/v2/utils/GetUserOrgsWithToken";
 
 function getDefaultFilevineScope() {
   return [
@@ -15,6 +13,10 @@ function getDefaultFilevineScope() {
 
 function getDefaultFilevineBaseUrl() {
   return ["https://api.filevineapp.com", "fv-app", "v2"].join("/");
+}
+
+function getFilevineUserOrgsUrl() {
+  return `${getDefaultFilevineBaseUrl()}/utils/GetUserOrgsWithToken`;
 }
 
 const tokenCache = {
@@ -137,14 +139,18 @@ async function getFilevineHeaders() {
     throw new Error("Filevine auth response did not include access_token");
   }
 
-  const contextResponse = await requestWithRetry("POST", FILEVINE_USER_ORGS_URL, {
+  const contextResponse = await requestWithRetry(
+    "POST",
+    getFilevineUserOrgsUrl(),
+    {
     headers: {
       "Content-Type": "application/json",
       Accept: "application/json",
       Authorization: `Bearer ${auth.access_token}`,
     },
     body: "{}",
-  });
+    },
+  );
 
   if (!contextResponse.ok) {
     const text = await contextResponse.text();
