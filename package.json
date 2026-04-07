@@ -1,0 +1,11 @@
+{
+  "name": "filevine-to-ctm-node",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "lint": "node --check netlify/functions/sync-ctm.js",
+    "local": "node run-local.js",
+    "check-auth": "node check-auth.js"
+  }
+}
