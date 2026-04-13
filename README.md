@@ -5,7 +5,7 @@ Netlify function replacement for the archived Python `filevine-to-ctm` Cloud Fun
 ## Function
 
 - `netlify/functions/sync-ctm.js`
-- Scheduled with `@daily`
+- Scheduled with `@hourly`
 - Runs on published Netlify deploys in UTC
 
 ## What It Does
