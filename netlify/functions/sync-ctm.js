@@ -37,6 +37,60 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function getPositiveIntegerEnv(name, fallback, maxValue = Number.POSITIVE_INFINITY) {
+  const rawValue = process.env[name];
+  const value = rawValue === undefined || rawValue === "" ? fallback : Number(rawValue);
+
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`Environment variable ${name} must be a positive integer`);
+  }
+
+  return Math.min(value, maxValue);
+}
+
+function getOptionalPositiveIntegerEnv(name) {
+  const rawValue = process.env[name];
+  if (rawValue === undefined || rawValue === "") {
+    return null;
+  }
+
+  const value = Number(rawValue);
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`Environment variable ${name} must be a positive integer`);
+  }
+
+  return value;
+}
+
+function getRecentActivityCutoff() {
+  const rawHours = process.env.FILEVINE_LOOKBACK_HOURS;
+  if (rawHours === undefined || rawHours === "") {
+    return null;
+  }
+
+  const hours = Number(rawHours);
+  if (!Number.isInteger(hours) || hours <= 0) {
+    throw new Error("FILEVINE_LOOKBACK_HOURS must be a positive integer");
+  }
+
+  return Date.now() - hours * 60 * 60 * 1000;
+}
+
+async function mapWithConcurrency(items, concurrency, iterator) {
+  const workerCount = Math.min(concurrency, items.length);
+  let index = 0;
+
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (index < items.length) {
+      const currentIndex = index;
+      index += 1;
+      await iterator(items[currentIndex], currentIndex);
+    }
+  });
+
+  await Promise.all(workers);
+}
+
 async function requestWithRetry(method, url, options = {}) {
   const {
     maxRetries = 3,
@@ -241,20 +295,39 @@ exports.handler = async () => {
     unexpectedErrors: 0,
   };
 
-  const batchSize = Number(process.env.LOG_PROGRESS_EVERY || 100);
+  const batchSize = getPositiveIntegerEnv("LOG_PROGRESS_EVERY", 100);
+  const projectPageLimit = getPositiveIntegerEnv(
+    "FILEVINE_PROJECT_PAGE_LIMIT",
+    1000,
+    1000,
+  );
+  const projectConcurrency = getPositiveIntegerEnv(
+    "FILEVINE_PROJECT_CONCURRENCY",
+    5,
+    25,
+  );
+  const maxProjectsPerRun =
+    getOptionalPositiveIntegerEnv("FILEVINE_MAX_PROJECTS_PER_RUN") ??
+    Number.POSITIVE_INFINITY;
+  const recentActivityCutoff = getRecentActivityCutoff();
   const filevineBaseUrl =
     process.env.FILEVINE_BASE_URL || getDefaultFilevineBaseUrl();
 
   try {
     console.log("sync-ctm started", {
       batchSize,
+      projectPageLimit,
+      projectConcurrency,
+      maxProjectsPerRun,
+      lookbackHours: process.env.FILEVINE_LOOKBACK_HOURS || null,
       filevineBaseUrl,
       orgId: process.env.FILEVINE_ORG_ID || null,
     });
 
-    let nextUrl = `${filevineBaseUrl}/Projects/?sortBy=LastActivity`;
+    let nextUrl = `${filevineBaseUrl}/Projects/?sortBy=LastActivity&limit=${projectPageLimit}`;
+    let shouldStopAfterCurrentPage = false;
 
-    while (nextUrl) {
+    while (nextUrl && !shouldStopAfterCurrentPage) {
       console.log("Fetching projects page", { nextUrl });
       const headers = await getFilevineHeaders();
       const projectResponse = await requestWithRetry("GET", nextUrl, { headers });
@@ -266,17 +339,36 @@ exports.handler = async () => {
       }
 
       const projectPage = await projectResponse.json();
+      const projectsToProcess = [];
+
       for (const caseItem of projectPage.items || []) {
+        if (stats.totalProjects >= maxProjectsPerRun) {
+          shouldStopAfterCurrentPage = true;
+          break;
+        }
+
+        if (
+          recentActivityCutoff &&
+          caseItem.lastActivity &&
+          Date.parse(caseItem.lastActivity) < recentActivityCutoff
+        ) {
+          shouldStopAfterCurrentPage = true;
+          break;
+        }
+
         stats.totalProjects += 1;
+        projectsToProcess.push(caseItem);
 
         if (batchSize > 0 && stats.totalProjects % batchSize === 0) {
           console.log("Progress", stats);
         }
+      }
 
+      await mapWithConcurrency(projectsToProcess, projectConcurrency, async (caseItem) => {
         const clientId = getClientId(caseItem);
         if (!clientId) {
           stats.projectsSkippedClientFetchFailed += 1;
-          continue;
+          return;
         }
 
         let client;
@@ -288,18 +380,18 @@ exports.handler = async () => {
           );
           if (!contactResponse.ok) {
             stats.projectsSkippedClientFetchFailed += 1;
-            continue;
+            return;
           }
           client = await contactResponse.json();
         } catch (error) {
           stats.projectsSkippedClientFetchFailed += 1;
-          continue;
+          return;
         }
 
         const phones = Array.isArray(client.phones) ? client.phones : [];
         if (phones.length === 0) {
           stats.projectsSkippedNoPhone += 1;
-          continue;
+          return;
         }
 
         stats.projectsProcessed += 1;
@@ -325,7 +417,7 @@ exports.handler = async () => {
             stats.unexpectedErrors += 1;
           }
         }
-      }
+      });
 
       const nextLink = projectPage.links?.next;
       nextUrl = nextLink ? `${filevineBaseUrl}${nextLink}` : null;

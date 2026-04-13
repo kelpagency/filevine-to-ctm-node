@@ -37,9 +37,27 @@ Optional:
 - `FILEVINE_PAT_SCOPE`
 - `FILEVINE_BASE_URL`
 - `LOG_PROGRESS_EVERY`
+- `FILEVINE_PROJECT_PAGE_LIMIT`
+  Page size for Filevine project fetches. Defaults to `1000`.
+- `FILEVINE_PROJECT_CONCURRENCY`
+  Number of projects processed in parallel per page. Defaults to `5`.
+- `FILEVINE_MAX_PROJECTS_PER_RUN`
+  Optional hard cap for a single invocation.
+- `FILEVINE_LOOKBACK_HOURS`
+  Optional recency cutoff. When set, the function stops once it reaches projects older than the window.
 
 ## Validate
 
 ```bash
 npm run check-auth
 ```
+
+## Tuning For Hourly Runs
+
+If the hourly job is still too slow, set one or more of these:
+
+- `FILEVINE_PROJECT_CONCURRENCY=10`
+- `FILEVINE_PROJECT_PAGE_LIMIT=1000`
+- `FILEVINE_LOOKBACK_HOURS=2`
+
+The last option is the most aggressive. It limits the run to the most recent projects by activity, so only use it if you are comfortable skipping older changes outside the window.
